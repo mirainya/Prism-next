@@ -18,11 +18,11 @@ func TestCheckUsesMirrorWithoutContactingGitHub(t *testing.T) {
 	manifest := testManifest(asset, "2.0.13")
 	mirrorHits, githubHits := 0, 0
 	mux := http.NewServeMux()
-	mux.HandleFunc("/mirainya/Prism/releases/latest/download/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/mirainya/Prism-next/releases/latest/download/manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		mirrorHits++
 		_, _ = w.Write(manifest)
 	})
-	mux.HandleFunc("/mirainya/Prism/releases/download/v2.0.13/prism-v2.0.13-linux-amd64.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/mirainya/Prism-next/releases/download/v2.0.13/prism-v2.0.13-linux-amd64.tar.gz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(asset)
 	})
 	mirror := httptest.NewServer(mux)
@@ -34,7 +34,7 @@ func TestCheckUsesMirrorWithoutContactingGitHub(t *testing.T) {
 	defer github.Close()
 
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources:  []Source{{Name: "mirror", BaseURL: mirror.URL}, {Name: "github", BaseURL: github.URL}},
 		Platform: "linux", Arch: "amd64",
 	})
@@ -56,7 +56,7 @@ func TestCheckUsesMirrorWithoutContactingGitHub(t *testing.T) {
 func TestCheckFallsBackAfterInvalidMirrorManifest(t *testing.T) {
 	manifest := testManifest([]byte("release archive"), "2.0.13")
 	mux := http.NewServeMux()
-	mux.HandleFunc("/mirainya/Prism/releases/latest/download/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/mirainya/Prism-next/releases/latest/download/manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 	})
 	mirror := httptest.NewServer(mux)
@@ -66,7 +66,7 @@ func TestCheckFallsBackAfterInvalidMirrorManifest(t *testing.T) {
 	}))
 	defer github.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.13",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.13",
 		Sources:  []Source{{Name: "mirror", BaseURL: mirror.URL}, {Name: "github", BaseURL: github.URL}},
 		Platform: "linux", Arch: "amd64",
 	})
@@ -99,7 +99,7 @@ func TestCheckHonorsSourcePriorityWithoutComparingFallbackVersions(t *testing.T)
 	}))
 	defer newServer.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources:  []Source{{Name: "mirror", BaseURL: oldServer.URL}, {Name: "github", BaseURL: newServer.URL}},
 		Platform: "linux", Arch: "amd64",
 	})
@@ -118,14 +118,14 @@ func TestCheckHonorsSourcePriorityWithoutComparingFallbackVersions(t *testing.T)
 func TestCheckIgnoresPrereleaseForStableChannel(t *testing.T) {
 	preview := strings.Replace(string(testManifest([]byte("preview"), "2.0.14")), `"channel":"stable"`, `"channel":"prerelease"`, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/mirainya/Prism/releases/latest/download/manifest.json" {
+		if r.URL.Path != "/mirainya/Prism-next/releases/latest/download/manifest.json" {
 			http.NotFound(w, r)
 			return
 		}
 		_, _ = w.Write([]byte(preview))
 	}))
 	defer server.Close()
-	client, err := newTestUpdateClient(Options{Repository: "mirainya/Prism", CurrentVersion: "2.0.12", Sources: []Source{{BaseURL: server.URL}}, Platform: "linux", Arch: "amd64"})
+	client, err := newTestUpdateClient(Options{Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12", Sources: []Source{{BaseURL: server.URL}}, Platform: "linux", Arch: "amd64"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,9 +139,9 @@ func TestDownloadVerifiesSHA256AndIsIdempotent(t *testing.T) {
 	manifest := testManifest(asset, "2.0.13")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/mirainya/Prism/releases/latest/download/manifest.json":
+		case "/mirainya/Prism-next/releases/latest/download/manifest.json":
 			_, _ = w.Write(manifest)
-		case "/mirainya/Prism/releases/download/v2.0.13/prism-v2.0.13-linux-amd64.tar.gz":
+		case "/mirainya/Prism-next/releases/download/v2.0.13/prism-v2.0.13-linux-amd64.tar.gz":
 			_, _ = w.Write(asset)
 		default:
 			http.NotFound(w, r)
@@ -149,7 +149,7 @@ func TestDownloadVerifiesSHA256AndIsIdempotent(t *testing.T) {
 	}))
 	defer server.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources: []Source{{Name: "test", BaseURL: server.URL}}, Platform: "linux", Arch: "amd64",
 	})
 	if err != nil {
@@ -195,7 +195,7 @@ func TestDownloadFallsBackToGitHubWhenMirrorAssetFails(t *testing.T) {
 	}))
 	defer github.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources:  []Source{{Name: "mirror", BaseURL: mirror.URL}, {Name: "github", BaseURL: github.URL}},
 		Platform: "linux", Arch: "amd64",
 	})
@@ -229,7 +229,7 @@ func TestDownloadUsesValidMirrorWithoutContactingGitHub(t *testing.T) {
 	}))
 	defer github.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources:  []Source{{Name: "mirror", BaseURL: mirror.URL}, {Name: "github", BaseURL: github.URL}},
 		Platform: "linux", Arch: "amd64",
 	})
@@ -257,7 +257,7 @@ func TestDownloadRejectsHashMismatchWithoutLeavingPartFile(t *testing.T) {
 	}))
 	defer server.Close()
 	client, err := newTestUpdateClient(Options{
-		Repository: "mirainya/Prism", CurrentVersion: "2.0.12",
+		Repository: "mirainya/Prism-next", CurrentVersion: "2.0.12",
 		Sources: []Source{{Name: "test", BaseURL: server.URL}}, Platform: "linux", Arch: "amd64",
 	})
 	if err != nil {
@@ -297,7 +297,7 @@ func TestRunCLICheckWritesJSON(t *testing.T) {
 }
 
 func testManifest(asset []byte, version string) []byte {
-	return []byte(fmt.Sprintf(`{"schema":1,"product":"Prism","channel":"stable","version":%q,"tag":"v%s","commit":"%s","build_time":"2026-10-13T00:00:00Z","assets":[{"name":"prism-v%s-linux-amd64.tar.gz","platform":"linux","arch":"amd64","size":%d,"sha256":"%s","asset_path":"mirainya/Prism/releases/download/v%s/prism-v%s-linux-amd64.tar.gz"}]}`,
+	return []byte(fmt.Sprintf(`{"schema":1,"product":"Prism","channel":"stable","version":%q,"tag":"v%s","commit":"%s","build_time":"2026-10-13T00:00:00Z","assets":[{"name":"prism-v%s-linux-amd64.tar.gz","platform":"linux","arch":"amd64","size":%d,"sha256":"%s","asset_path":"mirainya/Prism-next/releases/download/v%s/prism-v%s-linux-amd64.tar.gz"}]}`,
 		version, version, strings.Repeat("a", 40), version, len(asset), sha256Hex(asset), version, version))
 }
 
@@ -315,6 +315,9 @@ func TestDefaultClientHasOnlyGitHubAndRejectsPrivateHosts(t *testing.T) {
 	client, err := NewClient(Options{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if client.repository != "mirainya/Prism-next" {
+		t.Fatalf("default repository=%q, want new public repository", client.repository)
 	}
 	if len(client.sources) != 1 || client.sources[0].BaseURL != DefaultGitHubBaseURL {
 		t.Fatal("default source must only be GitHub")

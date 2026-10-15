@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	DefaultRepository      = "mirainya/Prism"
+	DefaultRepository      = "mirainya/Prism-next"
 	DefaultGitHubBaseURL   = "https://github.com"
 	DefaultManifestMaxSize = 1 << 20
 	DefaultDownloadMaxSize = 512 << 20

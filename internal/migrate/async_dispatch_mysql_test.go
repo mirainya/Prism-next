@@ -72,7 +72,7 @@ func verifyAsyncHTTPDispatch(t *testing.T, db *sql.DB, store *repository.Store, 
 			if mode.Load() == "timeout" {
 				select {
 				case <-r.Context().Done():
-				case <-time.After(250 * time.Millisecond):
+				case <-time.After(5 * time.Second):
 				}
 				return
 			}
@@ -217,7 +217,13 @@ func verifyAsyncHTTPDispatch(t *testing.T, db *sql.DB, store *repository.Store, 
 	for _, scenario := range []string{"timeout", "malformed"} {
 		t.Run("http_"+scenario+"_never_resubmits", func(t *testing.T) {
 			mode.Store(scenario)
-			if _, err := db.Exec(`UPDATE gw_channel_transports SET timeout_ms=40 WHERE id=?`, transportID); err != nil {
+			// Allow database evidence writes and connection setup on a busy CI runner.
+			// Only the timeout scenario needs a short deadline; malformed JSON does not.
+			timeoutMS := 30000
+			if scenario == "timeout" {
+				timeoutMS = 1000
+			}
+			if _, err := db.Exec(`UPDATE gw_channel_transports SET timeout_ms=? WHERE id=?`, timeoutMS, transportID); err != nil {
 				t.Fatal(err)
 			}
 			before := submits.Load()
@@ -231,7 +237,7 @@ func verifyAsyncHTTPDispatch(t *testing.T, db *sql.DB, store *repository.Store, 
 			}
 			assertState(created, "terminated_unknown")
 			if submits.Load() != before+1 {
-				t.Fatal("uncertain submission was repeated")
+				t.Fatalf("upstream submissions=%d, want exactly 1 (including recovery)", submits.Load()-before)
 			}
 			var requestSlots, recoverySlots int
 			var reservation, callState string

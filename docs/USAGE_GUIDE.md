@@ -16,8 +16,8 @@ Prism 的后台执行不使用 Redis 队列。异步任务事实与调度均保�
 ## 2. 构建与启动
 
 ```bash
-git clone https://github.com/mirainya/Prism.git
-cd Prism
+git clone https://github.com/mirainya/Prism-next.git
+cd Prism-next
 cp configs/config.example.yaml configs/config.yaml
 
 cd console
