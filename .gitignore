@@ -1,0 +1,90 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+prism
+prism-linux
+prism.linux
+prism.linux.gz
+prism.new
+prism.deploy
+prism-windows.exe
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Node
+console/node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+configs/config.yaml
+configs/config.local.yaml
+.env
+.env.*
+!.env.example
+
+# Local-only configuration, fixtures, and operational tools.
+.private/
+/configs/video/
+/scripts/private/
+*.private_test.go
+*.private.py
+/data/
+
+# Keep database migration history; ignore other local database artifacts.
+database/*
+!database/migrations/
+!database/migrations/*.sql
+
+# Logs
+*.log
+logs/
+
+# Temp
+.temp/
+.update/
+temp/
+nul
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Claude
+.claude
+
+# Plan
+plan.md
+.plan
+
+# Private local legacy migration files
+/database/migrations/*.sql
+!/database/migrations/20261026_120000_clean_schema_baseline.sql
+/caps_out.json
+/docs/init.sql
+/docs/volcengine_config.sql
+/docs/specs/2026-08-27-seedance-full-official-reverse-integration.md
+/cmd/poc/
+/docs/PROJECT_STATUS_2026-09-28.md
+/docs/unified_gateway_acceptance.md

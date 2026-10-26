@@ -1,0 +1,63 @@
+server:
+  port: 23523
+  jwt_secret: "your-secret-key-change-in-production"
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: 123456
+  dbname: prism
+  max_open_conns: 50        # 最大打开连接数
+  max_idle_conns: 10        # 最大空闲连接数
+  conn_max_lifetime: 3600   # 连接最大存活时间(秒)
+  conn_max_idle_time: 300   # 空闲连接最大存活时间(秒)
+  log_level: warn           # info/warn/error/silent
+
+redis:
+  addr: 127.0.0.1:6379
+  password: ""
+  db: 0
+  pool_size: 20             # 连接池大小
+  min_idle_conns: 5         # 最小空闲连接数
+  dial_timeout: 5           # 连接超时(秒)
+  read_timeout: 3           # 读超时(秒)
+  write_timeout: 3          # 写超时(秒)
+
+http_client:
+  timeout: 30               # 请求超时(秒)
+  max_idle_conns: 100       # 最大空闲连接数
+  max_idle_conns_per_host: 20
+  idle_conn_timeout: 90     # 空闲连接超时(秒)
+
+file_storage:
+  base_url: ""              # x-file-storage 服务地址，留空时禁用托管文件存储
+  api_key: ""               # x-file-storage API Key
+  allowed_base_urls: []     # Token 存储允许绑定的 HTTPS 地址；为空时仅允许 base_url
+  upload_path: "Prism/"
+  max_file_size_mb: 64
+  max_result_file_size_mb: 1024 # 上游生成结果经 XFS 转存时的单文件上限
+  max_total_size_mb: 1024    # 每个 Token 的 Files API 总容量上限
+  allowed_types:
+    - "image/png"
+    - "image/jpeg"
+    - "image/gif"
+    - "image/webp"
+    - "application/pdf"
+    - "text/plain"
+    - "text/csv"
+    - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+rate_limit:
+  enabled: false
+  requests_per_min: 60      # 每分钟请求上限(按Token)
+
+observability:
+  retain_api_call_payloads: false      # 默认不保存请求和响应正文
+  api_call_payload_retention_hours: 168
+  api_call_payload_max_bytes: 262144
+  api_call_metadata_retention_days: 90
+  resource_history_retention_days: 90 # 终态异步任务与闲置 Playground 对话历史
+  api_access_log_retention_days: 30
+  audit_event_retention_days: 180
+  billing_ledger_retention_days: 365

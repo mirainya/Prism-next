@@ -1,0 +1,13 @@
+[Unit]
+Description=Prism reviewed release installer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/libexec/prism-updater
+TimeoutStartSec=35min
+UMask=0022
+# Add the same gateway runtime EnvironmentFile used by prism.service.
+# The updater itself is independent of prism.service and survives its restart.
