@@ -1,0 +1,61 @@
+services:
+  prism:
+    build: .
+    environment:
+      PRISM_GATEWAY_INSTANCE_ID: "${PRISM_GATEWAY_INSTANCE_ID:-prism-compose-1}"
+      PRISM_GATEWAY_INSTANCE_ROLE: "${PRISM_GATEWAY_INSTANCE_ROLE:-api-worker}"
+      PRISM_GATEWAY_KEK_B64: "${PRISM_GATEWAY_KEK_B64:-}"
+      PRISM_GATEWAY_HMAC_B64: "${PRISM_GATEWAY_HMAC_B64:-}"
+      PRISM_GATEWAY_PAYLOAD_KEK_B64: "${PRISM_GATEWAY_PAYLOAD_KEK_B64:-}"
+      PRISM_GATEWAY_PAYLOAD_HMAC_B64: "${PRISM_GATEWAY_PAYLOAD_HMAC_B64:-}"
+    ports:
+      - "23523:23523"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    command: ["./prism", "migrate", "up"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: prism
+      MYSQL_USER: prism
+      MYSQL_PASSWORD: prism123456
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:

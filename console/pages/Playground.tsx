@@ -1,0 +1,101 @@
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, Bot, Image as ImageIcon, Loader2, Play, RefreshCw, Video } from 'lucide-react';
+import { fetchTokens } from '../services/api';
+import { ApiToken } from '../types';
+import { Select } from '../components/ui';
+import ChatTab from './playground/ChatTab';
+import ImageTab from './playground/ImageTab';
+import VideoTab from './playground/VideoTab';
+
+type TabType = 'chat' | 'image' | 'video';
+
+const Playground: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [selectedTokenId, setSelectedTokenId] = useState('');
+  const [isLoadingTokens, setIsLoadingTokens] = useState(true);
+  const [tokenError, setTokenError] = useState('');
+  const [tokenReloadKey, setTokenReloadKey] = useState(0);
+
+  useEffect(() => {
+    setIsLoadingTokens(true);
+    setTokenError('');
+    fetchTokens()
+      .then(list => {
+        const active = list.filter((t: ApiToken) => t.status === 'active');
+        setTokens(active);
+        if (active.length > 0 && !selectedTokenId) {
+          setSelectedTokenId(active[0].id);
+        }
+      })
+      .catch(reason => {
+        setTokens([]);
+        setSelectedTokenId('');
+        setTokenError(reason instanceof Error ? reason.message : '令牌读取失败');
+      })
+      .finally(() => setIsLoadingTokens(false));
+  }, [tokenReloadKey]);
+
+  const tabs = [
+    { key: 'chat' as TabType, label: 'Chat 调试', icon: <Bot size={16} /> },
+    { key: 'image' as TabType, label: '图片生成', icon: <ImageIcon size={16} /> },
+    { key: 'video' as TabType, label: '视频生成', icon: <Video size={16} /> },
+  ];
+
+  return (
+    <div className="h-[calc(100dvh-7rem)] md:h-[calc(100dvh-8rem)] flex flex-col">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 md:mb-4">
+        <div className="flex items-center gap-1 bg-[var(--primary-lighter)] rounded-xl p-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key ? 'bg-[var(--surface-card)] text-[var(--primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 min-w-0">
+          <label className="text-sm text-[var(--text-secondary)] flex-shrink-0">令牌：</label>
+          {isLoadingTokens ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Loader2 size={14} className="animate-spin" /> 加载中...</div>
+          ) : tokenError ? (
+            <div role="alert" className="flex min-w-0 items-center gap-2 text-sm text-red-600">
+              <AlertCircle size={14} className="shrink-0" />
+              <span className="max-w-48 truncate" title={tokenError}>{tokenError}</span>
+              <button type="button" onClick={() => setTokenReloadKey(key => key + 1)} title="重新读取令牌" aria-label="重新读取令牌" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-red-50"><RefreshCw size={14} /></button>
+            </div>
+          ) : tokens.length === 0 ? (
+            <span className="text-sm text-red-500">暂无可用令牌，请先创建</span>
+          ) : (
+            <Select value={selectedTokenId} onChange={setSelectedTokenId}
+              options={tokens.map(t => ({ label: `${t.name} (余额: ¥${t.balance.toFixed(2)})`, value: t.id }))}
+              placeholder="选择令牌"
+              className="min-w-0 flex-1 max-w-[260px]" />
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0">
+        {!selectedTokenId ? (
+          <div className="h-full flex items-center justify-center text-[var(--text-secondary)]">
+            <div className="text-center">
+              <Play size={48} className="mx-auto mb-3 opacity-30" />
+              <p>请先选择一个令牌开始试用</p>
+            </div>
+          </div>
+        ) : activeTab === 'chat' ? (
+          <ChatTab tokenId={selectedTokenId} />
+        ) : activeTab === 'image' ? (
+          <ImageTab tokenId={selectedTokenId} />
+        ) : (
+          <VideoTab tokenId={selectedTokenId} />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Playground;

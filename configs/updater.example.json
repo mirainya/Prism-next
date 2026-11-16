@@ -1,0 +1,6 @@
+{
+  "install_dir": "/opt/prism",
+  "service": "prism.service",
+  "service_user": "www",
+  "health_url": "http://127.0.0.1:23523/health"
+}

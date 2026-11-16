@@ -1,0 +1,3 @@
+# Install via visudo as /etc/sudoers.d/prism-update, mode 0440.
+# Adjust www only when prism.service uses a different application user.
+www ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block prism-update.service

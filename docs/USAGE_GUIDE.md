@@ -1,0 +1,227 @@
+# Prism v2.0.0 使用教程
+
+本文说明当前仓库代码的安装、目录配置和 API 使用。生产部署步骤必须按运维文档执行。
+
+## 1. 环境
+
+| 组件 | 要求 | 用途 |
+|---|---|---|
+| Go | 1.26.6+ | 后端构建 |
+| Node.js | `^20.19.0` 或 `>=22.12.0` | 控制台构建 |
+| MySQL | Oracle MySQL 8.0.16+ | 目录、执行、计费、Outbox 与租约；不支持 MariaDB、TiDB 等兼容实现 |
+| Redis | 7+ | 缓存和限流等运行依赖 |
+
+Prism 的后台执行不使用 Redis 队列。异步任务事实与调度均保存在 MySQL。
+
+## 2. 构建与启动
+
+```bash
+git clone https://github.com/mirainya/Prism-next.git
+cd Prism-next
+cp configs/config.example.yaml configs/config.yaml
+
+cd console
+npm ci
+npm run build
+cd ..
+
+VERSION=2.0.0
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SOURCE_REVISION="$(git rev-parse HEAD)"
+go build -trimpath -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X github.com/mirainya/Prism/internal/gateway/adapter.BuildRevision=${SOURCE_REVISION}" -o prism ./cmd/server
+./prism migrate up
+./prism
+```
+
+检查版本和健康状态：
+
+```bash
+./prism version
+curl http://localhost:23523/health
+```
+
+开发模式：
+
+```bash
+go run ./cmd/server
+
+cd console
+npm ci
+npm run dev
+```
+
+控制台开发服务器默认使用 `http://localhost:3001`，后端默认使用 `http://localhost:23523`。
+
+## 3. 配置
+
+复制 `configs/config.example.yaml` 后配置：
+
+- `server.port`、`server.jwt_secret`；
+- `database.*`；
+- `redis.*`；
+- `http_client.*`；
+- `file_storage.base_url`、`api_key`、`upload_path`、允许绑定的 `allowed_base_urls`、单文件与 Token 总容量上限；
+- `rate_limit.*`；
+- `observability.*`。
+
+后台执行没有 YAML 队列配置。SQL Worker 的并发和租约策略由当前实现管理。
+
+Files API、图片编辑与视频输入素材创建时优先使用当前 Prism Token 绑定的 XFileStorage 服务地址与 Key；Token 未绑定时回退到系统级配置，并将选定的地址、Key 和持久对象定位符固定在素材记录中。素材的后续读取、校验、删除和过期清理使用创建时固定的配置；升级前没有固定配置的旧素材仍按系统级配置处理。图片、视频结果则按 Call 固定的配置交付，上传目录仍遵循系统级 `upload_path`。可选地址来自 `file_storage.allowed_base_urls`；未配置列表时只允许系统级地址。Token 有绑定时，新 Call 使用 `managed_copy` 转存；未绑定时使用 `reference`，直接返回上游结果地址。更换或清除绑定只影响后续调用和新建素材，不改变在途任务、历史结果或已有素材的存储位置。
+
+在控制台「调用日志 → 调用详情 → 转存结果」查看每个文件的转存状态、格式、大小和失败原因；管理员还可查看保存路径。成功转存的文件支持打开原文件、复制地址和刷新地址，访问地址最长有效 15 分钟，且不超过文件保留期限。概览会单独提示转存失败；调用生成成功不代表文件转存成功。该功能读取现有交付记录，无需开启请求正文留存。 转存失败会记录失败阶段和可用的 HTTP 状态；超时、429 和服务端临时异常最多自动重试 5 次，权限、容量或内容校验错误停止自动重试。原结果仍保留时可点击「重新转存」，继续使用该调用的存储配置，不重新生成或扣费；原结果已清理时不能恢复。
+
+生产环境始终需要两个独立的 32 字节 Base64 Payload 密钥：
+
+```text
+PRISM_GATEWAY_PAYLOAD_KEK_B64
+PRISM_GATEWAY_PAYLOAD_HMAC_B64
+```
+
+Payload KEK/HMAC 用于请求、结果、回调目标及敏感证据。上游 API Key 明文保存在 `gw_credentials.secret`，新建和替换 Key 不使用凭据密钥环。只有启用中或停止分配中的旧凭据仍依赖密文时，数据面才需要旧的 `PRISM_GATEWAY_KEK_B64` 与 `PRISM_GATEWAY_HMAC_B64`。
+
+## 4. 数据库初始化与升级
+
+新库：
+
+```bash
+./prism migrate status
+./prism migrate up
+```
+
+服务启动只检查迁移状态，不执行 AutoMigrate。存在旧库、待执行或失败迁移时，服务拒绝启动。
+
+基线前实例需要停服和备份，补齐旧迁移至 `20260718_120000_add_conversation_turn_context_mode.sql`，然后执行：
+
+```bash
+./prism migrate adopt
+./prism migrate up
+```
+
+旧数据转入统一结构时依次使用：
+
+```bash
+./prism migrate audit
+./prism migrate audit-deep
+./prism migrate import-legacy
+./prism migrate import-runtime
+./prism migrate import-video-assets
+./prism migrate import-ai-files
+./prism migrate audit-deep
+```
+
+需要核验旧加密凭据时，在最终 `audit-deep` 前额外执行 `./prism migrate verify-crypto`，并提供生成这些密文时使用的旧凭据 KEK/HMAC。该命令只属于一次性迁移，不是日常 Key 管理步骤。
+
+只有最终 `audit-deep` 明确 `ready_for_cleanup=true`，并完成备份与停机验证后，才能执行：
+
+```bash
+./prism migrate cleanup-legacy
+```
+
+迁移和任何生产数据库操作都应单独审核后执行。
+
+## 5. 首次管理
+
+Prism 不创建默认管理员：
+
+1. 通过 `/api/auth/register` 注册用户；
+2. 由数据库管理员将 `users.role` 设置为 `admin`；
+3. 登录控制台配置统一网关。
+
+统一网关配置顺序：
+
+1. 创建结算币种；
+2. 创建渠道、凭据池和 API Key；
+3. 在运维台按模型类型检查模型、上游、映射、参数和下游入口；
+4. 直接编辑售价、上游成本、路由权重和 Key 状态；
+5. 运行目录发现与审核（仅迁移或来源核验需要）；
+6. 用专用 Token 验证对话、图片和视频调用。
+
+配置保存后直接更新活动目录，下一次请求使用新值，不需要创建草稿、发布或部署代次。
+
+目录未就绪时，控制面仍可使用，统一数据面返回不可用，不会改走旧执行链。
+
+旧“能力渠道”“视频渠道”和独立模型映射页面不再使用。所有模型与媒体能力都通过统一目录配置。
+
+## 6. 调用 API
+
+创建 API Token 后使用：
+
+```http
+Authorization: Bearer sk-prism-...
+```
+
+### 对话
+
+```bash
+curl "$BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $PRISM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"model-code","messages":[{"role":"user","content":"你好"}]}'
+```
+
+Messages 使用 `/v1/messages`，Responses 使用 `/v1/responses`。后台 Responses 可通过 `/v1/responses/:id` 查询，并且只有 Responses 资源提供取消操作。
+
+### 图片
+
+```bash
+curl "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer $PRISM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"image-model","prompt":"糖果色街道","size":"1024x1024"}'
+```
+
+图片编辑使用 `/v1/images/edits`。`image_urls` 中的公网地址校验后直接传给支持 URL 的上游；只支持 multipart 的上游由 Prism 读取原图后作为文件提交，不先转存 XFS。原 URL 需保持有效到上游读取完成。本地文件和 Base64 才转为统一媒体资产引用，不把 Base64 任务参数作为长期执行事实保存。
+
+### 视频
+
+```bash
+curl "$BASE_URL/v1/videos/generations" \
+  -H "Authorization: Bearer $PRISM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: video-demo-1" \
+  -d '{"model":"video-model","prompt":"海边日落","duration":5,"resolution":"1080p","aspect_ratio":"16:9"}'
+```
+
+查询：
+
+```bash
+curl "$BASE_URL/v1/videos/generations/<id>" \
+  -H "Authorization: Bearer $PRISM_TOKEN"
+```
+
+视频 API 不支持取消。`/v1/videos/estimate` 使用活动目录估价；`/v1/videos/queue` 返回当前 Token 的活动任务轻量视图。
+
+已有公网图片、视频或音频地址时，直接在 `references[].url` 提交，不必调用素材接口；`type` 分别使用 `image`、`video`、`audio`，并按模型能力选择 `role`。例如首帧图生视频：
+
+```bash
+curl "$BASE_URL/v1/videos/generations" \
+  -H "Authorization: Bearer $PRISM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"video-model","prompt":"镜头缓慢推进","references":[{"type":"image","role":"first_frame","url":"https://example.com/frame.png"}]}'
+```
+
+本地文件先通过 `/v1/videos/assets` 的 multipart 上传取得 `asset_id`，再在 `references[]` 中使用该 ID。该接口的 JSON URL 登记会下载并转存原文件，不是提交公网 URL 的必经步骤。每项引用只能填写 `url` 或 `asset_id` 之一。
+
+## 7. 调用、计费与结果
+
+- 每次调用创建统一 `gw_api_calls` 事实；
+- 每次真实上游交换创建 `gw_api_call_attempts`；
+- 调用在发送前按目录售价预授权，终态按实际计量结算；
+- Attempt 固定成本方案，上游成本按同一方案产生证据与事件；
+- 异步任务使用 SQL Outbox 与租约，提交结果不确定时进入恢复或人工核验；
+- 托管复制保存持久定位符，任务查询接口使用 Call 固定的 XFileStorage 地址和 Key 生成新的临时签名 URL；
+- 客户端回调只返回交付 ID，不返回私有定位符或临时签名 URL；客户端凭交付 ID 查询任务详情；
+- 结果转存和客户端回调是独立交付事实；转存失败不会改变已经成功的生成与计费终态。
+- `managed_copy` 的远程 URL 和内联结果在上传、导入或校验出现临时故障时，仅重试转存；内联图片从留存的上游响应恢复，不重新调用上游生成或扣费。最多自动重试 5 次，权限、容量等永久错误停止自动重试；原结果仍在保留期内时支持手动重新转存。
+
+调用列表只读取有界元数据。敏感正文单独加密保存并受权限、完整性与保留期约束。
+
+## 8. 控制台排查
+
+- “统一调用”查看 Call、Attempt、请求状态、HTTP 状态、耗时、计费与资源关联；
+- “视频任务”是 `gw_video_tasks` 的只读投影；
+- “目录来源与发现”查看上游模型发现、候选价格及审核；
+- “访问日志”“审计事件”“余额流水”分别查看请求、管理变更和资金变化；
+- “Playground”使用同一统一网关，不使用独立路由或计费逻辑。
+
+公开路由完整清单见 `API_REFERENCE.md`，生产切换见 `docs/unified_gateway_operations.md`。
